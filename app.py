@@ -177,12 +177,15 @@ const boostPads = [
     {x: 80, y: 580, type: 'small', active: true, timer: 0},  {x: 620, y: 580, type: 'small', active: true, timer: 0}
 ];
 
+// Arena-Banden angepasst: Die horizontalen Linien stoppen jetzt links und rechts am Torpfosten (X: 270 und 430)
 const arenaLines = [
-    {x1: 180, y1: 70, x2: 520, y2: 70},   
+    {x1: 180, y1: 70, x2: 270, y2: 70},   // Oben Links bis Torpfosten
+    {x1: 430, y1: 70, x2: 520, y2: 70},   // Oben Rechts von Torpfosten
     {x1: 520, y1: 70, x2: 640, y2: 190},  
     {x1: 640, y1: 190, x2: 640, y2: 710}, 
     {x1: 640, y1: 710, x2: 520, y2: 830}, 
-    {x1: 520, y1: 830, x2: 180, y2: 830}, 
+    {x1: 520, y1: 830, x2: 430, y2: 830},  // Unten Rechts bis Torpfosten
+    {x1: 270, y1: 830, x2: 180, y2: 830},  // Unten Links von Torpfosten
     {x1: 180, y1: 830, x2: 60, y2: 710},  
     {x1: 60, y1: 710, x2: 60, y2: 190},   
     {x1: 60, y1: 190, x2: 180, y2: 70}    
@@ -225,7 +228,6 @@ function checkCarBallCollision(car, ball) {
     let distance = Math.sqrt(dx * dx + dy * dy);
     if (distance < ball.radius + car.width/2) {
         let angle = Math.atan2(dy, dx);
-        // Stärke des Stoßes hängt vom aktuellen Tempo ab
         let force = Math.abs(car.speed) * 1.2 + 1.5;
         ball.vx = Math.cos(angle) * force;
         ball.vy = Math.sin(angle) * force;
@@ -246,10 +248,10 @@ function checkBoostPads(car) {
             pad.active = false;
             if (pad.type === 'big') {
                 car.boostAmount = Math.min(100, car.boostAmount + 50);
-                pad.timer = 400; // Längerer Respawn für große Pads
+                pad.timer = 400; 
             } else {
                 car.boostAmount = Math.min(100, car.boostAmount + 15);
-                pad.timer = 200; // Schnellerer Respawn für kleine Pads
+                pad.timer = 200; 
             }
         }
     });
@@ -267,7 +269,7 @@ function loop() {
 
     ball.x += ball.vx;
     ball.y += ball.vy;
-    ball.vx *= 0.99; // Verlangsamte Ballreibung
+    ball.vx *= 0.99; 
     ball.vy *= 0.99;
 
     checkCarBallCollision(p1, ball);
@@ -277,24 +279,33 @@ function loop() {
     checkBoostPads(p2);
 
     // --- TORE-SCHIESSEN LOGIK ---
-    // Orange Tor oben (Y < 70)
-    if (ball.y < 70 && ball.x > 270 && ball.x < 430) {
-        if (ball.y <= 45) { 
-            scoreBlue++; // Tor für Blau
-            resetField(); 
+    // Wenn sich der Ball im X-Bereich des Tores befindet (270 bis 430)
+    if (ball.x > 270 && ball.x < 430) {
+        // Orange Tor oben (Y < 70)
+        if (ball.y < 70) {
+            if (ball.y <= 45) { 
+                scoreBlue++; // Tor für Blau
+                resetField(); 
+            }
+        } 
+        // Blau Tor unten (Y > 830)
+        else if (ball.y > 830) {
+            if (ball.y >= 855) { 
+                scoreOrange++; // Tor für Orange
+                resetField(); 
+            }
         }
-        if (ball.x - ball.radius < 270 || ball.x + ball.radius > 430) ball.vx *= -1;
     } 
-    // Blau Tor unten (Y > 830)
-    else if (ball.y > 830 && ball.x > 270 && ball.x < 430) {
-        if (ball.y >= 855) { 
-            scoreOrange++; // Tor für Orange
-            resetField(); 
-        }
-        if (ball.x - ball.radius < 270 || ball.x + ball.radius > 430) ball.vx *= -1;
-    } 
-    else {
-        arenaLines.forEach(line => handleWallCollision(ball, line));
+
+    // Wandkollisionen für alle anderen Bereiche berechnen
+    arenaLines.forEach(line => handleWallCollision(ball, line));
+
+    // Abprallen an den inneren Torpfosten-Seiten (falls der Ball knapp vorbeischießt)
+    if ((ball.y < 70 || ball.y > 830) && (ball.x <= 270 && ball.x + ball.radius > 270)) {
+        ball.vx = -Math.abs(ball.vx);
+    }
+    if ((ball.y < 70 || ball.y > 830) && (ball.x >= 430 && ball.x - ball.radius < 430)) {
+        ball.vx = Math.abs(ball.vx);
     }
 
     // --- ZEICHNEN ---
@@ -321,19 +332,32 @@ function loop() {
     ctx.beginPath(); ctx.arc(350, 450, 80, 0, Math.PI*2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(60, 450); ctx.lineTo(640, 450); ctx.stroke();
 
-    // Tore zeichnen
+    // Tore zeichnen (Hintergründe/Boxen)
     ctx.lineWidth = 6;
     ctx.strokeStyle = "#e67e22"; ctx.strokeRect(270, 20, 160, 50); // Oben
     ctx.strokeStyle = "#3498db"; ctx.strokeRect(270, 830, 160, 50); // Unten
 
-    // Arena-Bande
+    // Arena-Bande zeichnen (Unterbrochen an den Toren)
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.moveTo(arenaLines[0].x1, arenaLines[0].y1);
-    arenaLines.forEach(line => ctx.lineTo(line.x2, line.y2));
-    ctx.closePath();
+    ctx.lineTo(arenaLines[0].x2, arenaLines[0].y2); // Teillinie 1 oben links
     ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(arenaLines[1].x1, arenaLines[1].y1);
+    for(let i=1; i<6; i++) {
+        ctx.lineTo(arenaLines[i].x2, arenaLines[i].y2);
+    }
+    ctx.stroke(); // Hauptteil rechts und unten rechts
+
+    ctx.beginPath();
+    ctx.moveTo(arenaLines[6].x1, arenaLines[6].y1);
+    for(let i=6; i<arenaLines.length; i++) {
+        ctx.lineTo(arenaLines[i].x2, arenaLines[i].y2);
+    }
+    ctx.stroke(); // Hauptteil links und unten links
 
     // Spieler & Ball zeichnen
     p1.draw();
@@ -347,7 +371,7 @@ function loop() {
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 28px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(`${scoreOrange} : ${scoreBlue}`, 350, 460); // Spielstand in der Mitte
+    ctx.fillText(`${scoreOrange} : ${scoreBlue}`, 350, 460); 
 
     // Boost-Balken anzeigen
     ctx.font = "14px sans-serif";
